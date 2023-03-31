@@ -181,6 +181,36 @@ class SaveAudio():
     def save_audio_ui(self, tensor, output_path, sample_rate, id_string, tame):
         return (save_audio(audio_out=(0.5 * tensor).clamp(-1,1) if(tame == 'Enabled') else tensor, output_path=output_path, sample_rate=sample_rate, id_str=id_string), )
 
+class LoadAudio():
+    def __init__(self):
+        pass
+    
+    @classmethod
+    def INPUT_TYPES(cls):
+        """
+        Input Types
+        """
+        return {
+            "required": {
+                "file_path": ("STRING", {"default": ''}),
+                },
+            "optional": {
+                },
+            }
+
+    RETURN_TYPES = ("STRING", "INT", "AUDIO")
+    RETURN_NAMES = ("path", "sample_rate", "tensor")
+    FUNCTION = "LoadAudio"
+    OUTPUT_NODE = True
+
+    CATEGORY = "SampleDiffusion"
+
+    def LoadAudio(self, file_path):
+        if file_path != '':
+            waveform, samplerate = torchaudio.load(file_path)
+        else:
+            waveform, samplerate = None, None
+        return (file_path, samplerate, waveform)
 
 class PreviewAudio():
     def __init__(self):
@@ -211,7 +241,6 @@ class PreviewAudio():
         # get filenames with extensions from paths
 
         filenames = [os.path.basename(path) for path in paths]
-        print(filenames)
         return {"result": (filenames,), "ui": filenames}
 
 class StringListIndex:
@@ -238,6 +267,7 @@ class StringListIndex:
 NODE_CLASS_MAPPINGS = {
     "Generate Audio Sample": AudioInference,
     "Save Audio": SaveAudio,
+    "Load Audio": LoadAudio,
     "PreviewAudio": PreviewAudio,
     "Get String By Index": StringListIndex,
 }
