@@ -1,7 +1,7 @@
 
 # Sample Diffusion ComfyUI extension
 
-Allows the use of dance diffusion/sample generator generator models in ComfyUI.<br>Trained [sample-generator](https://github.com/Harmonai-org/sample-generator) models can be used as input.
+Allows the use of trained [dance diffusion/sample generator](https://github.com/Harmonai-org/sample-generator) models in ComfyUI.
 
 ## Installation
 1. Install [ComfyUI](https://github.com/comfyanonymous/ComfyUI)
@@ -24,4 +24,4 @@ Feel free to check out my [other nodes](https://github.com/diontimmer/ComfyUI-Ve
  - [sample-diffusion](https://github.com/sudosilico/sample-diffusion)
  - [pythongosssss](https://github.com/pythongosssss) for the preview audio node & javascript magic.
  - [ComfyUI](https://github.com/comfyanonymous/ComfyUI)
- - [Harmonai]
+ - [Harmonai](https://github.com/Harmonai-org/sample-generator)
