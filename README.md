@@ -5,8 +5,8 @@ Allows the use of trained [dance diffusion/sample generator](https://github.com/
 
 ## Installation
 1. Install [ComfyUI](https://github.com/comfyanonymous/ComfyUI)
-2. Clone/download as zip and place in ```ComfyUI/custom_nodes```.
-3. Move/Copy playAudio.js to ```ComfyUI/web/extensions```
+2. Clone/download as zip and place ```SampleDiffusion``` folder in ```ComfyUI/custom_nodes```.
+3. Move/copy playAudio.js from ```SampleDiffusion``` to ```ComfyUI/web/extensions```
 4. Place models in ```ComfyUI/models/audio_diffusion``` ('audio_diffusion' entry in extra_model_paths.yaml is accepted).
 5. Launch!
 Includes a couple helper functions.
