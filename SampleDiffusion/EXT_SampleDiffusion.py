@@ -1,9 +1,8 @@
 # Imports
 
 import subprocess, sys, os
-import json
 import torch
-import argparse
+import random
 from folder_paths import folder_names_and_paths, models_dir, supported_pt_extensions, get_filename_list, get_full_path
 try:
     import soundfile
@@ -147,7 +146,7 @@ class AudioInference():
         )
         
         response = request_handler.process_request(request)#, lambda **kwargs: print(f"{kwargs['step'] / kwargs['x']}"))
-        paths = save_audio((0.5 * response.result).clamp(-1,1), f"{comfy_dir}/temp", sample_rate, f"{seed}")
+        paths = save_audio((0.5 * response.result).clamp(-1,1), f"{comfy_dir}/temp", sample_rate, f"{seed}_{random.randint(0, 100000)}")
         return (paths, response.result)
 
 class SaveAudio():
