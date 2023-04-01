@@ -5,7 +5,8 @@ import { app } from "/scripts/app.js";
 app.registerExtension({
 	name: "pysssss.PlayAudio",
 	async beforeRegisterNodeDef(nodeType, nodeData, app) {
-		if (nodeData.name === "PreviewAudio") {
+		const AudioPreviews = ["PreviewAudioFile", "PreviewAudioTensor"]
+		if (AudioPreviews.includes(nodeData.name)) {
 			const WIDGETS = Symbol();
 			nodeType.prototype.onExecuted = function (data) {
 				if (WIDGETS in this) {

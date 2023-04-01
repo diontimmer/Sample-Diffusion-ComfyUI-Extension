@@ -55,7 +55,6 @@ def save_audio(audio_out, output_path: str, sample_rate, id_str:str = None):
         open(output_file, "a").close()
         
         output = sample.cpu()
-
         torchaudio.save(output_file, output, sample_rate)
         out_files.append(output_file)
     return out_files
@@ -86,28 +85,28 @@ class AudioInference():
                 "sample_rate": ("INT", {"default": 44100, "min": 1, "max": 10000000000, "step": 1}),
                 "batch_size": ("INT", {"default": 1, "min": 1, "max": 10000000000, "step": 1}),
                 "steps": ("INT", {"default": 50, "min": 1, "max": 10000000000, "step": 1}),
-                "sampler": (SamplerType._member_names_,),
-                "scheduler": (SchedulerType._member_names_,),
-                "input_audio": ("STRING", {"default": ''}),
+                "sampler": (SamplerType._member_names_, {"default": "IPLMS"}),
+                "scheduler": (SchedulerType._member_names_, {"default": "CrashSchedule"}),
                 "noise_level": ("FLOAT", {"default": 0.7, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "seed": ("INT", {"default": -1}),
                 },
             "optional": {
+                "input_audio_path": ("STRING", {"default": '', "forceInput": True}),
                 },
             }
 
-    RETURN_TYPES = ("LIST", "AUDIO")
-    RETURN_NAMES = ("out_paths", "tensor")
+    RETURN_TYPES = ("LIST", "AUDIO", "INT")
+    RETURN_NAMES = ("out_paths", "tensor", "sample_rate")
     FUNCTION = "do_sample"
 
-    CATEGORY = "SampleDiffusion"
+    CATEGORY = "Audio/SampleDiffusion"
 
-    def do_sample(self, model, mode, chunk_size, sample_rate, batch_size, steps, sampler, scheduler, input_audio, noise_level, seed):
+    def do_sample(self, model, mode, chunk_size, sample_rate, batch_size, steps, sampler, scheduler, input_audio_path='', noise_level=0.7, seed=-1):
         model = get_full_path('audio_diffusion', model)
         device_type_accelerator = get_torch_device_type()
         device_accelerator = torch.device(device_type_accelerator)
         device_offload = torch.device('cuda')
-        input_audio = None if input_audio == '' else input_audio
+        input_audio_path = None if input_audio_path == '' else input_audio_path
         crop = lambda audio: audio
         load_input = lambda source: crop(load_audio(device_accelerator, source, sample_rate)) if source is not None else None
         
@@ -126,7 +125,7 @@ class AudioInference():
             seed=seed,
             batch_size=batch_size,
             
-            audio_source=load_input(input_audio),
+            audio_source=load_input(input_audio_path),
             audio_target=None,
             
             mask=None,
@@ -146,8 +145,8 @@ class AudioInference():
         )
         
         response = request_handler.process_request(request)#, lambda **kwargs: print(f"{kwargs['step'] / kwargs['x']}"))
-        paths = save_audio((0.5 * response.result).clamp(-1,1), f"{comfy_dir}/temp", sample_rate, f"{seed}_{random.randint(0, 100000)}")
-        return (paths, response.result)
+        paths = save_audio(response.result, f"{comfy_dir}/temp", sample_rate, f"{seed}_{random.randint(0, 100000)}")
+        return (paths, response.result, sample_rate)
 
 class SaveAudio():
     def __init__(self):
@@ -175,7 +174,7 @@ class SaveAudio():
     FUNCTION = "save_audio_ui"
     OUTPUT_NODE = True
 
-    CATEGORY = "SampleDiffusion"
+    CATEGORY = "Audio/SampleDiffusion"
 
     def save_audio_ui(self, tensor, output_path, sample_rate, id_string, tame):
         return (save_audio(audio_out=(0.5 * tensor).clamp(-1,1) if(tame == 'Enabled') else tensor, output_path=output_path, sample_rate=sample_rate, id_str=id_string), )
@@ -202,7 +201,7 @@ class LoadAudio():
     FUNCTION = "LoadAudio"
     OUTPUT_NODE = True
 
-    CATEGORY = "SampleDiffusion"
+    CATEGORY = "Audio/SampleDiffusion"
 
     def LoadAudio(self, file_path):
         if file_path != '':
@@ -211,7 +210,7 @@ class LoadAudio():
             waveform, samplerate = None, None
         return (file_path, samplerate, waveform)
 
-class PreviewAudio():
+class PreviewAudioFile():
     def __init__(self):
         pass
     
@@ -229,12 +228,12 @@ class PreviewAudio():
             }
 
     RETURN_TYPES = ()
-    FUNCTION = "PreviewAudio"
+    FUNCTION = "PreviewAudioFile"
     OUTPUT_NODE = True
 
-    CATEGORY = "SampleDiffusion"
+    CATEGORY = "Audio/SampleDiffusion"
 
-    def PreviewAudio(self, paths):
+    def PreviewAudioFile(self, paths):
         # fix slashes
         paths = [path.replace("\\", "/") for path in paths]
         # get filenames with extensions from paths
@@ -242,10 +241,33 @@ class PreviewAudio():
         filenames = [os.path.basename(path) for path in paths]
         return {"result": (filenames,), "ui": filenames}
 
-class StringListIndex:
-    def __init__(self) -> None:
-        pass
+class PreviewAudioTensor():
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "tensor": ("AUDIO",),
+                "sample_rate": ("INT", {"default": 44100, "min": 1, "max": 10000000000, "step": 1, "forceInput": True}),
+                "tame": (['Enabled', 'Disabled'],)
+                },
+            "optional": {
+                },
+            }
 
+    RETURN_TYPES = ("LIST", )
+    RETURN_NAMES = ("paths", )
+    FUNCTION = "PreviewAudioTensor"
+    OUTPUT_NODE = True
+
+    CATEGORY = "Audio/SampleDiffusion"
+
+    def PreviewAudioTensor(self, tensor, sample_rate, tame):
+        # fix slashes
+        paths = save_audio((0.5 * tensor).clamp(-1,1) if(tame == 'Enabled') else tensor, f"{comfy_dir}/temp", sample_rate, f"{random.randint(0, 10000000000)}")
+        paths = [path.replace("\\", "/") for path in paths]
+        return {"result": (paths,), "ui": paths}
+
+class StringListIndex:
     @classmethod
     def INPUT_TYPES(cls):
         return {
@@ -257,17 +279,18 @@ class StringListIndex:
 
     RETURN_TYPES = ("STRING",)
     FUNCTION = "doStuff"
-    CATEGORY = "SampleDiffusion/Helpers"
+    CATEGORY = "Audio/SampleDiffusion/Helpers"
 
     def doStuff(self, list, index):
         return (list[index],)
 
     
 NODE_CLASS_MAPPINGS = {
-    "Generate Audio Sample": AudioInference,
-    "Save Audio": SaveAudio,
-    "Load Audio": LoadAudio,
-    "PreviewAudio": PreviewAudio,
-    "Get String By Index": StringListIndex,
+    "GenerateAudioSample": AudioInference,
+    "SaveAudioTensor": SaveAudio,
+    "LoadAudioFile": LoadAudio,
+    "PreviewAudioFile": PreviewAudioFile,
+    "PreviewAudioTensor": PreviewAudioTensor,
+    "GetStringByIndex": StringListIndex,
 }
 
