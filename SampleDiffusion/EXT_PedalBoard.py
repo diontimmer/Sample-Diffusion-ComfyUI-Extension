@@ -114,8 +114,8 @@ class OTT():
                 },
             }
 
-    RETURN_TYPES = ("AUDIO", )
-    RETURN_NAMES = ("tensor", )
+    RETURN_TYPES = ("AUDIO", "INT")
+    RETURN_NAMES = ("tensor", "sample_rate")
     FUNCTION = "apply_ott"
 
     CATEGORY = "Audio/Pedalboard/VST3Wrappers"
@@ -142,7 +142,7 @@ class OTT():
         del params['vst3']
         total_tensor = apply_vst3_tensor(tensor, sample_rate, vst3, params)
 
-        return (total_tensor, )
+        return (total_tensor, sample_rate)
 
 
 # ****************************************************************************
