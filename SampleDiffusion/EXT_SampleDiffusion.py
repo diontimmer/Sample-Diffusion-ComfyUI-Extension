@@ -1,5 +1,6 @@
 # Imports
-
+from server import PromptServer
+from aiohttp import web
 import subprocess, sys, os
 import torch
 import random
@@ -190,7 +191,7 @@ class LoadAudio():
         """
         return {
             "required": {
-                "file_path": ("STRING", {"default": ''}),
+                "file_path": ("STRING", {}),
                 },
             "optional": {
                 },
@@ -285,6 +286,14 @@ class StringListIndex:
         return (list[index],)
 
     
+# Add using router
+print('aaaaaaaaa')
+@PromptServer.instance.routes.get("/hello")
+async def get_hello(request):
+    return web.json_response("hello")
+
+
+
 NODE_CLASS_MAPPINGS = {
     "GenerateAudioSample": AudioInference,
     "SaveAudioTensor": SaveAudio,
