@@ -71,7 +71,7 @@ app.registerExtension({
 
 				// For each file create a seek bar + play button
 				for (const file of data) {
-					addPlaybackWidget(this, file, `/view?filename=${encodeURIComponent(file)}`);
+					addPlaybackWidget(this, file, `/view?type=temp&filename=${encodeURIComponent(file)}`);
 				}
 			};
 		} else if (nodeData.name === "LoadAudioFile") {

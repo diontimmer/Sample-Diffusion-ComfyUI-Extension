@@ -5,10 +5,13 @@ import subprocess, sys, os
 import torch
 import random
 from folder_paths import folder_names_and_paths, models_dir, supported_pt_extensions, get_filename_list, get_full_path
+from comfy.model_management import get_torch_device
+
 try:
-    import soundfile
+    import soundfile as sf
 except ModuleNotFoundError:
     subprocess.check_call([sys.executable, "-m", "pip", "install", "soundfile"])
+    import soundfile as sf
 
 try:
     import torchaudio
@@ -29,7 +32,59 @@ def get_comfy_dir():
     else:
         return None
 
+PromptServer.instance.app._client_max_size = 250 * 1024 * 1024 #  250 MB
 
+# Add route for uploading audio, duplicates image upload but to audio_input
+@PromptServer.instance.routes.post("/samplediffusion/upload/audio")
+async def upload_audio(request):
+    upload_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), "audio_input")
+
+    if not os.path.exists(upload_dir):
+        os.makedirs(upload_dir)
+    
+    post = await request.post()
+    file = post.get("file")
+
+    if file and file.file:
+        filename = file.filename
+        if not filename:
+            return web.Response(status=400)
+
+        if os.path.exists(os.path.join(upload_dir, filename)):
+            os.remove(os.path.join(upload_dir, filename))
+
+        filepath = os.path.join(upload_dir, filename)
+
+        with open(filepath, "wb") as f:
+            f.write(file.file.read())
+        
+        return web.json_response({"name" : filename})
+    else:
+        return web.Response(status=400)
+
+# Add route for getting audio, duplicates view image but allows audio_input
+@PromptServer.instance.routes.get("/samplediffusion/audio")
+async def view_image(request):
+    if "filename" in request.rel_url.query:
+        type = request.rel_url.query.get("type", "audio_input")
+        if type not in ["output", "input", "temp", "audio_input"]:
+            return web.Response(status=400)
+
+        output_dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), type)
+        if "subfolder" in request.rel_url.query:
+            full_output_dir = os.path.join(output_dir, request.rel_url.query["subfolder"])
+            if os.path.commonpath((os.path.abspath(full_output_dir), output_dir)) != output_dir:
+                return web.Response(status=403)
+            output_dir = full_output_dir
+
+        filename = request.rel_url.query["filename"]
+        filename = os.path.basename(filename)
+        file = os.path.join(output_dir, filename)
+
+        if os.path.isfile(file):
+            return web.FileResponse(file, headers={"Content-Disposition": f"filename=\"{filename}\""})
+        
+    return web.Response(status=404)
 # init and sample_diffusion lib load
 
 folder_names_and_paths["audio_diffusion"] = ([os.path.join(models_dir, "audio_diffusion")], supported_pt_extensions)
@@ -42,7 +97,7 @@ lib = os.path.join(comfy_dir, 'custom_nodes/SampleDiffusion/libs/sample_generato
 if not os.path.exists(os.path.join(comfy_dir, lib)):
     os.system(f'git clone https://github.com/sudosilico/sample-diffusion.git {os.path.join(comfy_dir, lib)}')
 sys.path.append(os.path.join(comfy_dir, lib))
-from util.util import load_audio
+from util.util import load_audio, crop_audio
 from util.platform import get_torch_device_type
 from dance_diffusion.api import RequestHandler, Request, SamplerType, SchedulerType, ModelType
 
@@ -92,6 +147,7 @@ class AudioInference():
                 "seed": ("INT", {"default": -1}),
                 },
             "optional": {
+                "input_tensor": ("AUDIO", {}),
                 "input_audio_path": ("STRING", {"default": '', "forceInput": True}),
                 },
             }
@@ -102,14 +158,19 @@ class AudioInference():
 
     CATEGORY = "Audio/SampleDiffusion"
 
-    def do_sample(self, model, mode, chunk_size, sample_rate, batch_size, steps, sampler, scheduler, input_audio_path='', noise_level=0.7, seed=-1):
+    def do_sample(self, model, mode, chunk_size, sample_rate, batch_size, steps, sampler, scheduler, input_audio_path='', input_tensor=None, noise_level=0.7, seed=-1):
         model = get_full_path('audio_diffusion', model)
         device_type_accelerator = get_torch_device_type()
         device_accelerator = torch.device(device_type_accelerator)
         device_offload = torch.device('cuda')
-        input_audio_path = None if input_audio_path == '' else input_audio_path
-        crop = lambda audio: audio
-        load_input = lambda source: crop(load_audio(device_accelerator, source, sample_rate)) if source is not None else None
+        if input_tensor is None:
+            input_audio_path = None if input_audio_path == '' else input_audio_path
+            crop = lambda audio: crop_audio(audio, chunk_size, 0)
+            load_input = lambda source: crop(load_audio(device_accelerator, source, sample_rate)) if source is not None else None
+            audio_source = load_input(input_audio_path)
+        else:
+            audio_source = crop_audio(input_tensor, chunk_size, 0)
+
         
         request_handler = RequestHandler(device_accelerator, device_offload, optimize_memory_use=False, use_autocast=True)
         
@@ -126,7 +187,7 @@ class AudioInference():
             seed=seed,
             batch_size=batch_size,
             
-            audio_source=load_input(input_audio_path),
+            audio_source=audio_source,
             audio_target=None,
             
             mask=None,
@@ -182,7 +243,7 @@ class SaveAudio():
 
 class LoadAudio():
     def __init__(self):
-        pass
+        self.input_audio = os.listdir(f'{comfy_dir}/custom_nodes/SampleDiffusion/audio_input')
     
     @classmethod
     def INPUT_TYPES(cls):
@@ -191,25 +252,40 @@ class LoadAudio():
         """
         return {
             "required": {
+                ""
                 "file_path": ("STRING", {}),
                 },
             "optional": {
                 },
             }
 
-    RETURN_TYPES = ("STRING", "INT", "AUDIO")
-    RETURN_NAMES = ("path", "sample_rate", "tensor")
+    RETURN_TYPES = ("STRING", "AUDIO", "INT")
+    RETURN_NAMES = ("path", "tensor", "sample_rate")
     FUNCTION = "LoadAudio"
     OUTPUT_NODE = True
 
     CATEGORY = "Audio/SampleDiffusion"
 
     def LoadAudio(self, file_path):
-        if file_path != '':
-            waveform, samplerate = torchaudio.load(file_path)
-        else:
+        if file_path == '':
             waveform, samplerate = None, None
-        return (file_path, samplerate, waveform)
+            return (file_path, samplerate, waveform)
+
+        file_path = f'{comfy_dir}/custom_nodes/SampleDiffusion/audio_input/{file_path}'
+
+        if file_path.endswith('.mp3'):
+            if os.path.exists(file_path.replace('.mp3', '')+'.wav'):
+                file_path = file_path.replace('.mp3', '')+'.wav'
+            else:
+                data, samplerate = sf.read(file_path)
+                sf.write(file_path.replace('.mp3', '')+'.wav', data, samplerate)
+
+            os.remove(file_path.replace('.wav', '.mp3'))
+
+        waveform, samplerate = torchaudio.load(file_path)
+        waveform = waveform.to(get_torch_device())
+
+        return (file_path, waveform, samplerate)
 
 class PreviewAudioFile():
     def __init__(self):
@@ -266,6 +342,8 @@ class PreviewAudioTensor():
         # fix slashes
         paths = save_audio((0.5 * tensor).clamp(-1,1) if(tame == 'Enabled') else tensor, f"{comfy_dir}/temp", sample_rate, f"{random.randint(0, 10000000000)}")
         paths = [path.replace("\\", "/") for path in paths]
+        # get filenames with extensions from paths
+        paths = [os.path.basename(path) for path in paths]
         return {"result": (paths,), "ui": paths}
 
 class StringListIndex:
@@ -285,9 +363,6 @@ class StringListIndex:
     def doStuff(self, list, index):
         return (list[index],)
 
-    
-# Add using router
-print('aaaaaaaaa')
 @PromptServer.instance.routes.get("/hello")
 async def get_hello(request):
     return web.json_response("hello")
