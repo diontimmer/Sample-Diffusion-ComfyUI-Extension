@@ -12,7 +12,7 @@ Includes a couple helper functions.
 1. Install [ComfyUI](https://github.com/comfyanonymous/ComfyUI)
 2. Clone/download as zip and place ```SampleDiffusion``` folder in ```ComfyUI/custom_nodes```.
 3. Move/copy playAudio.js from ```SampleDiffusion``` to ```ComfyUI/web/extensions```
-4. Place models in ```ComfyUI/models/audio_diffusion``` ('audio_diffusion' entry in extra_model_paths.yaml is accepted).
+4. Place models in ```ComfyUI/models/audio_diffusion``` ('audio_diffusion' entry in extra_model_paths.yaml is accepted).<br>
 4.5 (Optional) Install [xfer OTT VST3](https://xferrecords.com/freeware)
 5. Launch!
 
