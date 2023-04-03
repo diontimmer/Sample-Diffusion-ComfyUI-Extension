@@ -92,8 +92,12 @@ app.registerExtension({
 							body,
 						});
 
+					if(node.widgets) {
 						node.widgets.length = 1;
+					}
+					if(node.widgets_values) {
 						node.widgets_values.length = 1;
+					}
 						if (resp.status === 200) {
 							const { name } = await resp.json();
 							pathWidget.value = name;
