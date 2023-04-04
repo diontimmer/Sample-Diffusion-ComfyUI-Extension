@@ -91,7 +91,7 @@ def save_spectrogram_image(audio_tensor, sample_rate=44100, nperseg=512, noverla
     spectrogram = 10 * np.log10(spectrogram)
 
     # Plot the spectrogram
-    plt.figure(figsize=(10, 5))
+    plt.figure(figsize=(10, 10))
     plt.pcolormesh(times, freqs, spectrogram, cmap=cmap)
     if labels:
         plt.ylabel('Frequency [Hz]')

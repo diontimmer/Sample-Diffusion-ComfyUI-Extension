@@ -305,6 +305,7 @@ class LoadAudio():
 
         waveform, samplerate = torchaudio.load(file_path)
         waveform = waveform.to(get_torch_device())
+        waveform = waveform.unsqueeze(0)
 
         return (file_path, waveform, samplerate)
 
@@ -405,6 +406,45 @@ class PreviewAudioTensor():
         paths = [os.path.basename(path) for path in paths]
         return {"result": (paths,), "ui": paths}
 
+class MergeTensors():
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "tensor_1": ("AUDIO",),
+                "tensor_2": ("AUDIO",),
+                "tensor_1_volume": ("FLOAT", {"default": 1, "min": 0, "max": 1, "step": 0.01}),
+                "tensor_2_volume": ("FLOAT", {"default": 1, "min": 0, "max": 1, "step": 0.01}),
+                },
+            "optional": {
+                "sample_rate": ("INT", {"default": 44100, "min": 1, "max": 10000000000, "step": 1, "forceInput": True}),
+                },
+            }
+
+    RETURN_TYPES = ("AUDIO", "INT")
+    RETURN_NAMES = ("tensor", "sample_rate")
+    FUNCTION = "do_merge"
+
+    CATEGORY = "Audio/Helpers"
+
+    def do_merge(self, tensor_1, tensor_2, tensor_1_volume, tensor_2_volume, sample_rate):
+        # Ensure both batches have the same size and number of channels
+        assert tensor_1.size(0) == tensor_2.size(0) and tensor_1.size(1) == tensor_2.size(1), "Batches must have the same size and number of channels"
+
+        # Pad or truncate the shorter waveforms in the batches to match the length of the longer ones
+        max_length = max(tensor_1.size(2), tensor_2.size(2))
+        tensor_1_padded = torch.zeros(tensor_1.size(0), tensor_1.size(1), max_length)
+        tensor_2_padded = torch.zeros(tensor_2.size(0), tensor_2.size(1), max_length)
+
+        tensor_1_padded[:, :, :tensor_1.size(2)] = tensor_1
+        tensor_2_padded[:, :, :tensor_2.size(2)] = tensor_2
+
+        # Mix the batches with specified volumes
+        mixed_tensors = tensor_1_volume * tensor_1_padded + tensor_2_volume * tensor_2_padded
+
+        return (mixed_tensors, sample_rate)
+
+
 class StringListIndex:
     @classmethod
     def INPUT_TYPES(cls):
@@ -417,16 +457,10 @@ class StringListIndex:
 
     RETURN_TYPES = ("STRING",)
     FUNCTION = "doStuff"
-    CATEGORY = "Audio/SampleDiffusion/Helpers"
+    CATEGORY = "Audio/Helpers"
 
     def doStuff(self, list, index):
         return (list[index],)
-
-@PromptServer.instance.routes.get("/hello")
-async def get_hello(request):
-    return web.json_response("hello")
-
-
 
 NODE_CLASS_MAPPINGS = {
     "GenerateAudioSample": AudioInference,
@@ -436,5 +470,6 @@ NODE_CLASS_MAPPINGS = {
     "PreviewAudioTensor": PreviewAudioTensor,
     "GetStringByIndex": StringListIndex,
     "LoadAudioModel (DD)": LoadAudioModelDD,
+    "MixAudioTensors": MergeTensors,
 }
 
