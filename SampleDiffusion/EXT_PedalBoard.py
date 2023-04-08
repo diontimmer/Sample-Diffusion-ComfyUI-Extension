@@ -183,7 +183,6 @@ class ChorusEffect():
             "required": {
                 "tensor": ("AUDIO", ),
                 "sample_rate": ("INT", {"default": 44100, "min": 1, "max": 10000000000, "step": 1, "forceInput": True}),
-                "bit_depth": ("FLOAT", {'default': 8.0, "min": 0.0, "max": 32.0, "step": 0.1}),
                 "rate_hz": ("FLOAT", {'default': 1.0, "min": 0.0, "max": 10.0, "step": 0.1}),
                 "depth": ("FLOAT", {'default': 0.25, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "centre_delay_ms": ("FLOAT", {'default': 0.0, "min": 0.0, "max": 80.0, "step": 0.1}),

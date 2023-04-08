@@ -462,6 +462,38 @@ class StringListIndex:
     def doStuff(self, list, index):
         return (list[index],)
 
+class AudioIndex:
+    def __init__(self) -> None:
+        pass
+
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "path": ("STRING", {"default": ""}),
+                "index": ("INT", {"default": 0, "min": 0, "max": 0xffffffffffffffff}),
+            },
+        }
+
+    RETURN_TYPES = ("AUDIO", "INT", "STRING")
+    RETURN_NAMES = ("tensor", "sample_rate", "filename")
+    FUNCTION = "doStuff"
+    CATEGORY = "Audio/Helpers"
+
+    def doStuff(self, path, index):
+        if not os.path.exists(path):
+            raise Exception("Path does not exist")
+        audios = []
+        for audio in os.listdir(path):
+            if any(audio.endswith(ext) for ext in [".wav", ".flac"]):
+                audios.append(audio)
+        filename = audios[index]
+        audio, sample_rate = torchaudio.load(os.path.join(path, filename))
+        # make stereo if mono
+        audio = audio.unsqueeze(0)
+        audio.to(get_torch_device())
+        return (audio, sample_rate, filename)
+
 NODE_CLASS_MAPPINGS = {
     "GenerateAudioSample": AudioInference,
     "SaveAudioTensor": SaveAudio,
@@ -471,5 +503,6 @@ NODE_CLASS_MAPPINGS = {
     "GetStringByIndex": StringListIndex,
     "LoadAudioModel (DD)": LoadAudioModelDD,
     "MixAudioTensors": MergeTensors,
+    "GetAudioFromFolderIndex": AudioIndex,
 }
 
