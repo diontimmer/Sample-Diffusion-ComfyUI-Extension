@@ -4,20 +4,26 @@ from aiohttp import web
 import subprocess, sys, os
 import torch
 import random
-from folder_paths import folder_names_and_paths, models_dir, supported_pt_extensions, get_filename_list, get_full_path
+from folder_paths import models_dir, get_filename_list
 from comfy.model_management import get_torch_device
+import importlib
+import yaml
 
-try:
-    import soundfile as sf
-except ModuleNotFoundError:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "soundfile"])
-    import soundfile as sf
+def hijack_import(importname, installname):
+    try:
+        importlib.import_module(importname)
+    except ModuleNotFoundError:
+        print(f"Import failed for {importname}, Installing {installname}")
+        subprocess.check_call([sys.executable, "-m", "pip", "install", installname])
 
-try:
-    import torchaudio
-except ModuleNotFoundError:
-    subprocess.check_call([sys.executable, "-m", "pip", "install", "torchaudio"])
-    import torchaudio
+hijack_import("audio_diffusion_pytorch", "audio_diffusion_pytorch==0.0.96")
+hijack_import("diffusion", "v-diffusion-pytorch")
+hijack_import("k_diffusion", "k-diffusion")
+hijack_import("soundfile", "soundfile")
+hijack_import("torchaudio", "torchaudio")
+
+import soundfile as sf
+import torchaudio
 
 def get_comfy_dir():
     dirs = __file__.split('\\')
@@ -85,9 +91,20 @@ async def view_image(request):
             return web.FileResponse(file, headers={"Content-Disposition": f"filename=\"{filename}\""})
         
     return web.Response(status=404)
-# init and sample_diffusion lib load
 
-folder_names_and_paths["audio_diffusion"] = ([os.path.join(models_dir, "audio_diffusion")], supported_pt_extensions)
+
+config = os.path.join(os.path.dirname(os.path.realpath(__file__)), "config.yaml")
+
+
+if not os.path.exists(config):
+    with open(config, "w") as f:
+        yaml.dump({"model_folder": f"{os.path.join(models_dir, 'audio_diffusion')}"}, f)
+
+with open(config, "r") as f:
+    config = yaml.safe_load(f)
+models_folder = config["model_folder"]
+
+# init and sample_diffusion lib load
 
 
 comfy_dir = get_comfy_dir()   
@@ -97,10 +114,10 @@ lib = os.path.join(comfy_dir, 'custom_nodes/SampleDiffusion/libs/sample_generato
 if not os.path.exists(os.path.join(comfy_dir, lib)):
     os.system(f'git clone https://github.com/sudosilico/sample-diffusion.git {os.path.join(comfy_dir, lib)}')
 sys.path.append(os.path.join(comfy_dir, lib))
-from util.util import load_audio, crop_audio
-from dance_diffusion.api import RequestHandler, Request, SamplerType, SchedulerType, ModelType
-from dance_diffusion.base.model import ModelWrapperBase
-from dance_diffusion.base.inference import InferenceBase
+from util.util import load_audio, cropper
+from dance_diffusion.api import RequestHandler, Request, ModelType
+from diffusion_library.sampler import SamplerType
+from diffusion_library.scheduler import SchedulerType
 from dance_diffusion.dd.model import DDModelWrapper
 from dance_diffusion.dd.inference import DDInference
 
@@ -150,8 +167,11 @@ class AudioInference():
                 "mode": (['Generation', 'Variation'],),
                 "batch_size": ("INT", {"default": 1, "min": 1, "max": 10000000000, "step": 1}),
                 "steps": ("INT", {"default": 50, "min": 1, "max": 10000000000, "step": 1}),
-                "sampler": (SamplerType._member_names_, {"default": "IPLMS"}),
-                "scheduler": (SchedulerType._member_names_, {"default": "CrashSchedule"}),
+                "sampler": (SamplerType._member_names_, {"default": "V_IPLMS"}),
+                "sigma_min": ("FLOAT", {"default": 0.1, "min": 0.0, "max": 1280, "step": 0.01}),
+                "sigma_max": ("FLOAT", {"default": 50, "min": 0.0, "max": 1280, "step": 0.01}),
+                "rho": ("FLOAT", {"default": 0.7, "min": 0.0, "max": 128.0, "step": 0.01}),
+                "scheduler": (SchedulerType._member_names_, {"default": "V_CRASH"}),
                 "noise_level": ("FLOAT", {"default": 0.7, "min": 0.0, "max": 1.0, "step": 0.01}),
                 "seed": ("INT", {"default": -1}),
                 },
@@ -167,17 +187,20 @@ class AudioInference():
 
     CATEGORY = "Audio/SampleDiffusion"
 
-    def do_sample(self, audio_model, mode, batch_size, steps, sampler, scheduler, input_audio_path='', input_tensor=None, noise_level=0.7, seed=-1):
+    def do_sample(self, audio_model, mode, batch_size, steps, sampler, sigma_min, sigma_max, rho, scheduler, input_audio_path='', input_tensor=None, noise_level=0.7, seed=-1):
 
 
         wrapper, inference = audio_model
         device_type_accelerator = f'cuda:{get_torch_device()}'
         device_accelerator = torch.device(device_type_accelerator)
         device_offload = torch.device(f'cuda:{get_torch_device()}')
+
+
+        autocrop = cropper(wrapper.chunk_size, True)
+
         if input_tensor is None:
             input_audio_path = None if input_audio_path == '' else input_audio_path
-            crop = lambda audio: crop_audio(audio, wrapper.chunk_size, 0)
-            load_input = lambda source: crop(load_audio(device_accelerator, source, wrapper.sample_rate)) if source is not None else None
+            load_input = lambda source: autocrop(load_audio(device_accelerator, source, wrapper.sample_rate)) if source is not None else None
             audio_source = load_input(input_audio_path)
         else:
             if len(input_tensor.shape) == 3:
@@ -188,7 +211,7 @@ class AudioInference():
                 input_tensor = input_tensor.view(1, sample_length).repeat(2, 1)
                 input_tensor = input_tensor.to(get_torch_device())
 
-            audio_source = crop_audio(input_tensor, wrapper.chunk_size, 0)
+            audio_source = autocrop(input_tensor)
 
         
         request_handler = RequestHandler(device_accelerator, device_offload, optimize_memory_use=False, use_autocast=True)
@@ -220,11 +243,15 @@ class AudioInference():
                     
             steps=steps,
             
-            sampler_type=sampler,
+            sampler_type=SamplerType[sampler],
             sampler_args={'use_tqdm': True},
             
-            scheduler_type=scheduler,
-            scheduler_args={}
+            scheduler_type=SchedulerType[scheduler],
+            scheduler_args={
+                'sigma_min': sigma_min,
+                'sigma_max': sigma_max,
+                'rho': rho,
+            }
         )
         
         response = request_handler.process_request(request)#, lambda **kwargs: print(f"{kwargs['step'] / kwargs['x']}"))
@@ -243,7 +270,7 @@ class SaveAudio():
         return {
             "required": {
                 "tensor": ("AUDIO", ),
-                "output_path": ("STRING", {"default": 'ComfyUI/output/audio_samples'}),
+                "output_path": ("STRING", {"default": f'{comfy_dir}/output/audio_samples'}),
                 "sample_rate": ("INT", {"default": 44100, "min": 1, "max": 10000000000, "step": 1}),
                 "id_string": ("STRING", {"default": 'ComfyUI'}),
                 "tame": (['Enabled', 'Disabled'],)
@@ -315,10 +342,13 @@ class LoadAudioModelDD():
         """
         Input Types
         """
+        global models_folder
+        models = os.listdir(models_folder)
+        models = [x for x in models if x.endswith('.ckpt')]
         return {
             "required": {
                 ""
-                "model": (get_filename_list("audio_diffusion"), {}),
+                "model": (models, {}),
                 "chunk_size": ("INT", {"default": 65536, "min": 32768, "max": 10000000000, "step": 32768}),
                 "sample_rate": ("INT", {"default": 44100, "min": 1, "max": 10000000000, "step": 1}),
                 "optimize_memory_use": (['Enabled', 'Disabled'], {"default": 'Enabled'}),
@@ -336,7 +366,8 @@ class LoadAudioModelDD():
     CATEGORY = "Audio/SampleDiffusion"
 
     def DoLoadAudioModelDD(self, model, chunk_size, sample_rate, optimize_memory_use, autocast):
-        model = get_full_path('audio_diffusion', model)
+        global models_folder
+        model = os.path.join(models_folder, model)
         device = get_torch_device()
         wrapper = DDModelWrapper()
         wrapper.load(model, device, optimize_memory_use, chunk_size, sample_rate)
