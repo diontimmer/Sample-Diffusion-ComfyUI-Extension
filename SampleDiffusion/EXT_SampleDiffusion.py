@@ -114,7 +114,7 @@ lib = os.path.join(comfy_dir, 'custom_nodes/SampleDiffusion/libs/sample_generato
 if not os.path.exists(os.path.join(comfy_dir, lib)):
     os.system(f'git clone https://github.com/sudosilico/sample-diffusion.git {os.path.join(comfy_dir, lib)}')
 sys.path.append(os.path.join(comfy_dir, lib))
-from util.util import load_audio, cropper
+from util.util import load_audio, crop_audio
 from dance_diffusion.api import RequestHandler, Request, ModelType
 from diffusion_library.sampler import SamplerType
 from diffusion_library.scheduler import SchedulerType
@@ -195,12 +195,11 @@ class AudioInference():
         device_accelerator = torch.device(device_type_accelerator)
         device_offload = torch.device(f'cuda:{get_torch_device()}')
 
-
-        autocrop = cropper(wrapper.chunk_size, True)
+        crop = lambda audio: crop_audio(audio, wrapper.chunk_size, 0)
 
         if input_tensor is None:
             input_audio_path = None if input_audio_path == '' else input_audio_path
-            load_input = lambda source: autocrop(load_audio(device_accelerator, source, wrapper.sample_rate)) if source is not None else None
+            load_input = lambda source: crop(load_audio(device_accelerator, source, wrapper.sample_rate)) if source is not None else None
             audio_source = load_input(input_audio_path)
         else:
             if len(input_tensor.shape) == 3:
@@ -211,7 +210,7 @@ class AudioInference():
                 input_tensor = input_tensor.view(1, sample_length).repeat(2, 1)
                 input_tensor = input_tensor.to(get_torch_device())
 
-            audio_source = autocrop(input_tensor)
+            audio_source = crop(input_tensor)
 
         
         request_handler = RequestHandler(device_accelerator, device_offload, optimize_memory_use=False, use_autocast=True)
