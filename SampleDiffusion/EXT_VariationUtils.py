@@ -108,6 +108,42 @@ class LoadAudioDir:
 # ----------------
 
 
+class ListToBatch:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "tensor_list": ("AUDIO_LIST",),
+            },
+            "optional": {
+                "sample_rate": ("INT", {"default": 44100, "min": 1, "max": 1e9, "step": 1, "forceInput": True}),
+            },
+        }
+
+    RETURN_TYPES = ("AUDIO", "INT")
+    RETURN_NAMES = ("tensor", "sample_rate")
+    FUNCTION = "list_to_batch"
+
+    CATEGORY = "Audio/VariationUtils"
+
+    def list_to_batch(self, tensor_list, sample_rate):
+        max_len = 0
+        batch_size = 0
+        for tensor in tensor_list:
+            max_len = max(tensor.size(2), max_len)
+            batch_size += tensor.size(0)
+        tensor_out = torch.zeros((batch_size, 2, max_len), device=tensor_list[0].device)
+
+        batch_start = 0
+        for tensor in tensor_list:
+            batch_end = batch_start + tensor.size(0)
+            tensor_out[batch_start:batch_end, :, :tensor.size(2)] += tensor
+            batch_start = batch_end
+
+        return tensor_out, sample_rate
+
+
+
 class ConcatAudioList:
     @classmethod
     def INPUT_TYPES(cls):
@@ -193,6 +229,7 @@ NODE_CLASS_MAPPINGS = {
     'SliceAudio': SliceAudio,
     'BatchToList': BatchToList,
     'LoadAudioDir': LoadAudioDir,
+    'ListToBatch': ListToBatch,
     'ConcatAudioList': ConcatAudioList,
     'SequenceVariation': SequenceVariation
 }
