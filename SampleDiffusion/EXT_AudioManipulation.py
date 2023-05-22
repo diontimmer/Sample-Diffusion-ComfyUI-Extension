@@ -163,7 +163,6 @@ class DuplicateAudio:
     def duplicate_audio(self, tensor, count, sample_rate):
         return tensor.repeat(count, 1, 1), sample_rate
 
-
 # ------------------
 # AUDIO MANIPULATION
 # ------------------
@@ -224,10 +223,11 @@ class ResampleAudio:
         return {
             "required": {
                 "tensor": ("AUDIO",),
-                "sample_rate": ("INT", {"default": 44100, "min": 1, "max": 1e9, "step": 1}),
                 "sample_rate_target": ("INT", {"default": 44100, "min": 1, "max": 1e9, "step": 1}),
             },
-            "optional": {},
+            "optional": {
+                "sample_rate": ("INT", {"default": 44100, "min": 1, "max": 1e9, "step": 1, "forceInput": True}),
+            },
         }
 
     RETURN_TYPES = ("AUDIO", "INT")
@@ -238,7 +238,7 @@ class ResampleAudio:
 
     def resample_audio(self, tensor, sample_rate, sample_rate_target):
         y = tensor.cpu().numpy()
-        y = librosa.resample(y, sample_rate, sample_rate_target)
+        y = librosa.resample(y, orig_sr=sample_rate, target_sr=sample_rate_target)
         tensor_out = torch.from_numpy(y).to(device=tensor.device)
 
         return tensor_out, sample_rate_target

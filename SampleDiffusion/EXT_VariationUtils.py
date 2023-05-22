@@ -143,13 +143,13 @@ class ListToBatch:
         return tensor_out, sample_rate
 
 
-
 class ConcatAudioList:
     @classmethod
     def INPUT_TYPES(cls):
         return {
             "required": {
-                "tensor_list": ("AUDIO_LIST",)
+                "tensor_list": ("AUDIO_LIST",),
+                "original_length": ("INT", {"default": 0, "min": 0, "max": 1e9, "step": 1})
             },
             "optional": {
                 "sample_rate": ("INT", {"default": 44100, "min": 1, "max": 1e9, "step": 1, "forceInput": True}),
@@ -162,8 +162,40 @@ class ConcatAudioList:
 
     CATEGORY = "Audio/VariationUtils"
 
-    def concat_audio(self, tensor_list, sample_rate):
-        return torch.cat(tensor_list, 2), sample_rate
+    def concat_audio(self, tensor_list, original_length, sample_rate):
+        # set original length to 0 for simple back-to-back concatenation
+        if original_length == 0:
+            return torch.cat(tensor_list, 2), sample_rate
+
+        # restore original length from before it was extended to a multiple of 65536 for inference
+        joined_length = original_length * len(tensor_list)
+        joined_tensor = torch.zeros((tensor_list[0].size(0), tensor_list[0].size(1), joined_length), device=tensor_list[0].device)
+        for i, tensor in enumerate(tensor_list):
+            joined_tensor[:, :, original_length * i: original_length * (i + 1)] += tensor[:, :, :original_length]
+        return joined_tensor, sample_rate
+
+
+class GetSingle:
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "tensor_list": ("AUDIO_LIST",),
+                "index": ("INT", {"default": 0, "min": 1, "max": 1e9, "step": 1})
+            },
+            "optional": {
+                "sample_rate": ("INT", {"default": 44100, "min": 1, "max": 1e9, "step": 1, "forceInput": True}),
+            },
+        }
+
+    RETURN_TYPES = ("AUDIO", "INT")
+    RETURN_NAMES = ("tensor", "sample_rate")
+    FUNCTION = "get_single"
+
+    CATEGORY = "Audio/VariationUtils"
+
+    def get_single(self, tensor_list, index, sample_rate):
+        return tensor_list[index], sample_rate
 
 # ----------
 # PROCESSING
@@ -231,5 +263,6 @@ NODE_CLASS_MAPPINGS = {
     'LoadAudioDir': LoadAudioDir,
     'ListToBatch': ListToBatch,
     'ConcatAudioList': ConcatAudioList,
+    'GetSingle': GetSingle,
     'SequenceVariation': SequenceVariation
 }
