@@ -283,7 +283,7 @@ class SaveAudio():
     FUNCTION = "save_audio_ui"
     OUTPUT_NODE = True
 
-    CATEGORY = "Audio/SampleDiffusion"
+    CATEGORY = "Audio"
 
     def save_audio_ui(self, tensor, output_path, sample_rate, id_string, tame):
         return (save_audio(audio_out=(0.5 * tensor).clamp(-1,1) if(tame == 'Enabled') else tensor, output_path=output_path, sample_rate=sample_rate, id_str=id_string), )
@@ -311,7 +311,7 @@ class LoadAudio():
     FUNCTION = "LoadAudio"
     OUTPUT_NODE = True
 
-    CATEGORY = "Audio/SampleDiffusion"
+    CATEGORY = "Audio"
 
     def LoadAudio(self, file_path):
         if file_path == '':
@@ -398,7 +398,7 @@ class PreviewAudioFile():
     FUNCTION = "PreviewAudioFile"
     OUTPUT_NODE = True
 
-    CATEGORY = "Audio/SampleDiffusion"
+    CATEGORY = "Audio"
 
     def PreviewAudioFile(self, paths):
         # fix slashes
@@ -426,7 +426,7 @@ class PreviewAudioTensor():
     FUNCTION = "PreviewAudioTensor"
     OUTPUT_NODE = True
 
-    CATEGORY = "Audio/SampleDiffusion"
+    CATEGORY = "Audio"
 
     def PreviewAudioTensor(self, tensor, sample_rate, tame):
         # fix slashes

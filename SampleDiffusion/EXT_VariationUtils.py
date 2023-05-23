@@ -181,7 +181,7 @@ class GetSingle:
         return {
             "required": {
                 "tensor_list": ("AUDIO_LIST",),
-                "index": ("INT", {"default": 0, "min": 1, "max": 1e9, "step": 1})
+                "index": ("INT", {"default": 1, "min": 1, "max": 1e9, "step": 1})
             },
             "optional": {
                 "sample_rate": ("INT", {"default": 44100, "min": 1, "max": 1e9, "step": 1, "forceInput": True}),
@@ -203,7 +203,7 @@ class GetSingle:
 
 
 # Perform variation on each audio tensor in a list
-class SequenceVariation:
+class BulkVariation:
     def __init__(self):
         pass
 
@@ -233,7 +233,7 @@ class SequenceVariation:
     RETURN_NAMES = ("tensor_list", "sample_rate")
     FUNCTION = "do_variation"
 
-    CATEGORY = "Audio/VariationUtils"
+    CATEGORY = "Audio/SampleDiffusion"
 
     def do_variation(self, audio_model, batch_size, steps, sampler, sigma_min, sigma_max, rho, scheduler, tensor_list, noise_level=0.7, seed=-1):
         audio_inference = AudioInference()
@@ -264,5 +264,5 @@ NODE_CLASS_MAPPINGS = {
     'ListToBatch': ListToBatch,
     'ConcatAudioList': ConcatAudioList,
     'GetSingle': GetSingle,
-    'SequenceVariation': SequenceVariation
+    'BulkVariation': BulkVariation
 }
