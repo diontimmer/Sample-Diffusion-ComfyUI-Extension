@@ -191,9 +191,9 @@ class AudioInference():
 
 
         wrapper, inference = audio_model
-        device_type_accelerator = f'cuda:{get_torch_device()}'
+        device_type_accelerator = get_torch_device()
         device_accelerator = torch.device(device_type_accelerator)
-        device_offload = torch.device(f'cuda:{get_torch_device()}')
+        device_offload = get_torch_device()
 
         crop = lambda audio: crop_audio(audio, wrapper.chunk_size, 0)
 
